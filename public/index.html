@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CRYPTO RNG 1M</title>
+<style>
+body{background:#000;color:#0f0;font-family:Arial;text-align:center}
+.box{border:2px solid #0f0;padding:20px;margin:10px}
+.num{font-size:60px}
+</style>
+</head>
+<body>
+
+<h2>CRYPTOGRAPHY RNG</h2>
+
+<div class="box">
+  <div>Period</div>
+  <div id="period"></div>
+</div>
+
+<div class="box">
+  <div>Result</div>
+  <div class="num" id="number">--</div>
+</div>
+
+<div class="box">
+  <div>History (20)</div>
+  <div id="history"></div>
+</div>
+
+<script>
+async function load() {
+  const res = await fetch("/api/result");
+  const data = await res.json();
+
+  document.getElementById("period").innerText = data.period;
+  document.getElementById("number").innerText =
+    data.preview ? data.number : "**";
+
+  document.getElementById("history").innerHTML =
+    data.history.map(h => `${h.period} → ${h.number}`).join("<br>");
+}
+
+setInterval(load, 1000);
+load();
+</script>
+
+</body>
+</html>
