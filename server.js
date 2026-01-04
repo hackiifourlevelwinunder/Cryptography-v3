@@ -1,74 +1,91 @@
-const express = require("express");
-const crypto = require("crypto");
-const path = require("path");
+import crypto from "crypto";
+import express from "express";
+import cors from "cors";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(cors());
 
-const RESET_HOUR = 5;
+// ===== CONFIG =====
+const SECRET_KEY = "CHANGE_THIS_SECRET_KEY"; // 반드시 change karo
+const RESET_HOUR = 5;   // 5:30 AM IST reset
 const RESET_MIN = 30;
-const SERVER_SEED = "PRIVATE_DAILY_SERVER_SEED";
 
+// ===== STATE =====
+let currentRound = null;
 let history = [];
 
+// ===== TIME (IST) =====
 function getIST() {
-  const now = new Date();
-  return new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  return new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
 }
 
-function getGameDate(now) {
-  const reset = new Date(now);
-  reset.setHours(RESET_HOUR, RESET_MIN, 0, 0);
-  if (now < reset) now.setDate(now.getDate() - 1);
-  return now.toISOString().slice(0, 10).replace(/-/g, "");
+// ===== PERIOD LOGIC =====
+// PERIOD = YYYYMMDD100010000 + (minute + 1)
+function getPeriodData() {
+  const now = getIST();
+
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+
+  const minutesNow = now.getHours() * 60 + now.getMinutes();
+  const resetMinutes = RESET_HOUR * 60 + RESET_MIN;
+
+  // minute + 1 rule
+  const roundIndex =
+    minutesNow >= resetMinutes
+      ? minutesNow - resetMinutes + 1
+      : 1440 - resetMinutes + minutesNow + 1;
+
+  const base = `${y}${m}${d}100010000`;
+  const period = base + String(roundIndex).padStart(3, "0");
+
+  const secondsLeft = 60 - now.getSeconds();
+
+  return { period, roundIndex, secondsLeft };
 }
 
-function getRoundIndex(now) {
-  const reset = new Date(now);
-  reset.setHours(RESET_HOUR, RESET_MIN, 0, 0);
-  if (now < reset) reset.setDate(reset.getDate() - 1);
-  return Math.floor((now - reset) / 60000);
-}
+// ===== CRYPTOGRAPHY RNG (FRESH EVERY ROUND) =====
+function generateRound() {
+  const { period, roundIndex } = getPeriodData();
 
-function getPeriod(now) {
-  return `${getGameDate(now)}100010000${getRoundIndex(now)}`;
-}
-
-function generateNumber(period) {
-  const hash = crypto
+  // fresh seed every round
+  const seed = crypto
     .createHash("sha256")
-    .update(SERVER_SEED + "|" + period)
+    .update(SECRET_KEY + period + roundIndex)
     .digest("hex");
 
-  return parseInt(hash.substring(0, 8), 16) % 10;
-}
+  const number = parseInt(seed.slice(0, 12), 16) % 10;
 
-app.get("/api/result", (req, res) => {
-  const now = getIST();
-  const seconds = now.getSeconds();
-  const period = getPeriod(now);
-  const number = generateNumber(period);
-
-  if (!history.find(h => h.period === period)) {
-    history.unshift({
-      period,
-      number,
-      time: now.toLocaleTimeString("en-IN")
-    });
-    history = history.slice(0, 20);
-  }
-
-  res.json({
+  const data = {
     period,
     number,
-    preview: seconds >= 30,
-    seconds,
+    time: getIST().toISOString()
+  };
+
+  history.unshift(data);
+  history = history.slice(0, 20);
+  currentRound = data;
+}
+
+// initial + every 1 minute
+generateRound();
+setInterval(generateRound, 60000);
+
+// ===== API =====
+app.get("/state", (req, res) => {
+  const { period, secondsLeft } = getPeriodData();
+  res.json({
+    date: getIST().toISOString().slice(0, 10),
+    time: getIST().toLocaleTimeString(),
+    countdown: secondsLeft,
+    period,
+    number: currentRound.number,
     history
   });
 });
 
-app.use(express.static(path.join(__dirname, "public")));
-
-app.listen(PORT, () => {
-  console.log("RNG Server Running");
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("CRYPTO RNG RUNNING"));
