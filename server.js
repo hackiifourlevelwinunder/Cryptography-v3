@@ -7,11 +7,9 @@ import { fileURLToPath } from "url";
 const app = express();
 app.use(cors());
 
-// ===== PATH FIX =====
+// ===== PATH SETUP (public/index.html) =====
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// ===== STATIC PUBLIC FOLDER =====
 app.use(express.static(path.join(__dirname, "public")));
 
 // ===== CONFIG =====
@@ -20,7 +18,7 @@ const RESET_HOUR = 5;
 const RESET_MIN = 30;
 
 // ===== STATE =====
-let currentRound = null;
+let currentRound = null;   // previous = final
 let history = [];
 
 // ===== IST TIME =====
@@ -31,6 +29,7 @@ function getIST() {
 }
 
 // ===== PERIOD LOGIC =====
+// YYYYMMDD100010000 + (minute + 1)
 function getPeriodData() {
   const now = getIST();
 
@@ -54,8 +53,8 @@ function getPeriodData() {
   return { period, roundIndex, secondsLeft };
 }
 
-// ===== CRYPTOGRAPHY RNG (FRESH EVERY ROUND) =====
-function generateRound() {
+// ===== HIGH-FREQUENCY CRYPTO RNG (NEW ROUND ONLY) =====
+function generateNewRound() {
   const { period, roundIndex } = getPeriodData();
 
   const seed = crypto
@@ -65,36 +64,46 @@ function generateRound() {
 
   const number = parseInt(seed.slice(0, 12), 16) % 10;
 
-  const data = {
+  currentRound = {
     period,
     number,
     time: getIST().toISOString()
   };
-
-  history.unshift(data);
-  history = history.slice(0, 20);
-  currentRound = data;
 }
 
-// ===== INIT + LOOP =====
-generateRound();
-setInterval(generateRound, 60000);
+// ===== TIMER CONTROL (FINAL LOCK RULE) =====
+setInterval(() => {
+  const now = getIST();
+  const sec = now.getSeconds();
+
+  // 🔁 New RNG only at 00 second
+  if (sec === 0) {
+    generateNewRound();
+  }
+
+  // 🔒 History ADD only at 59 second
+  if (sec === 59 && currentRound) {
+    history.unshift(currentRound);
+    history = history.slice(0, 20);
+  }
+}, 1000);
 
 // ===== API =====
 app.get("/state", (req, res) => {
   const { period, secondsLeft } = getPeriodData();
+
   res.json({
     date: getIST().toISOString().slice(0, 10),
     time: getIST().toLocaleTimeString(),
     countdown: secondsLeft,
     period,
-    number: currentRound.number,
+    number: currentRound ? currentRound.number : "-",
     history
   });
 });
 
-// ===== START SERVER =====
+// ===== START =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("CRYPTO RNG SERVER RUNNING");
+  console.log("CRYPTO RNG FINAL LOCK RUNNING");
 });
