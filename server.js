@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 const app = express();
 app.use(cors());
 
-// ===== PATH SETUP (public/index.html) =====
+// ===== PATH SETUP =====
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
@@ -18,7 +18,8 @@ const RESET_HOUR = 5;
 const RESET_MIN = 30;
 
 // ===== STATE =====
-let currentRound = null;   // previous = final
+let currentRound = null;   // screen par dikhne wala (FINAL)
+let pendingRound = null;   // hidden RNG (next)
 let history = [];
 
 // ===== IST TIME =====
@@ -53,8 +54,8 @@ function getPeriodData() {
   return { period, roundIndex, secondsLeft };
 }
 
-// ===== HIGH-FREQUENCY CRYPTO RNG (NEW ROUND ONLY) =====
-function generateNewRound() {
+// ===== HIGH FREQUENCY CRYPTO RNG =====
+function generatePendingRound() {
   const { period, roundIndex } = getPeriodData();
 
   const seed = crypto
@@ -64,24 +65,28 @@ function generateNewRound() {
 
   const number = parseInt(seed.slice(0, 12), 16) % 10;
 
-  currentRound = {
+  pendingRound = {
     period,
     number,
     time: getIST().toISOString()
   };
 }
 
-// ===== TIMER CONTROL (FINAL LOCK RULE) =====
+// ===== TIMER CONTROL (FINAL RULE) =====
 setInterval(() => {
-  const now = getIST();
-  const sec = now.getSeconds();
+  const sec = getIST().getSeconds();
 
-  // 🔁 New RNG only at 00 second
+  // 00 sec → next round RNG generate (HIDDEN)
   if (sec === 0) {
-    generateNewRound();
+    generatePendingRound();
   }
 
-  // 🔒 History ADD only at 59 second
+  // 45 sec → previous = FINAL (freeze)
+  if (sec === 45 && pendingRound) {
+    currentRound = pendingRound;
+  }
+
+  // 59 sec → history ADD (LOCK)
   if (sec === 59 && currentRound) {
     history.unshift(currentRound);
     history = history.slice(0, 20);
@@ -102,8 +107,8 @@ app.get("/state", (req, res) => {
   });
 });
 
-// ===== START =====
+// ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("CRYPTO RNG FINAL LOCK RUNNING");
+  console.log("CRYPTO RNG FINAL (45s FREEZE, 59s HISTORY) RUNNING");
 });
