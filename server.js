@@ -1,20 +1,29 @@
 import crypto from "crypto";
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 app.use(cors());
 
+// ===== PATH FIX =====
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ===== STATIC PUBLIC FOLDER =====
+app.use(express.static(path.join(__dirname, "public")));
+
 // ===== CONFIG =====
-const SECRET_KEY = "CHANGE_THIS_SECRET_KEY"; // 반드시 change karo
-const RESET_HOUR = 5;   // 5:30 AM IST reset
+const SECRET_KEY = process.env.SECRET_KEY || "CHANGE_THIS_SECRET_KEY";
+const RESET_HOUR = 5;
 const RESET_MIN = 30;
 
 // ===== STATE =====
 let currentRound = null;
 let history = [];
 
-// ===== TIME (IST) =====
+// ===== IST TIME =====
 function getIST() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
@@ -22,7 +31,6 @@ function getIST() {
 }
 
 // ===== PERIOD LOGIC =====
-// PERIOD = YYYYMMDD100010000 + (minute + 1)
 function getPeriodData() {
   const now = getIST();
 
@@ -33,7 +41,6 @@ function getPeriodData() {
   const minutesNow = now.getHours() * 60 + now.getMinutes();
   const resetMinutes = RESET_HOUR * 60 + RESET_MIN;
 
-  // minute + 1 rule
   const roundIndex =
     minutesNow >= resetMinutes
       ? minutesNow - resetMinutes + 1
@@ -51,7 +58,6 @@ function getPeriodData() {
 function generateRound() {
   const { period, roundIndex } = getPeriodData();
 
-  // fresh seed every round
   const seed = crypto
     .createHash("sha256")
     .update(SECRET_KEY + period + roundIndex)
@@ -70,7 +76,7 @@ function generateRound() {
   currentRound = data;
 }
 
-// initial + every 1 minute
+// ===== INIT + LOOP =====
 generateRound();
 setInterval(generateRound, 60000);
 
@@ -87,5 +93,8 @@ app.get("/state", (req, res) => {
   });
 });
 
+// ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("CRYPTO RNG RUNNING"));
+app.listen(PORT, () => {
+  console.log("CRYPTO RNG SERVER RUNNING");
+});
