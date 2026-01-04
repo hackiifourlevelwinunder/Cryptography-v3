@@ -3,15 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <title>CRYPTO RNG 1M</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{background:#000;color:#0f0;font-family:Arial;text-align:center}
-.box{border:2px solid #0f0;padding:20px;margin:10px}
-.num{font-size:60px}
+body{
+  margin:0;
+  background:#000;
+  color:#00ff88;
+  font-family:Arial;
+  text-align:center
+}
+.box{
+  border:1px solid #00ff88;
+  margin:12px;
+  padding:10px
+}
+.num{
+  font-size:80px;
+  font-weight:bold
+}
+.history{
+  font-size:13px
+}
 </style>
 </head>
 <body>
 
 <h2>CRYPTOGRAPHY RNG</h2>
+
+<div class="box">
+  <div id="date"></div>
+  <div id="time"></div>
+  <div>Countdown: <span id="cd">--</span>s</div>
+</div>
 
 <div class="box">
   <div>Period</div>
@@ -20,30 +43,32 @@ body{background:#000;color:#0f0;font-family:Arial;text-align:center}
 
 <div class="box">
   <div>Result</div>
-  <div class="num" id="number">--</div>
+  <div class="num" id="num">-</div>
 </div>
 
 <div class="box">
   <div>History (20)</div>
-  <div id="history"></div>
+  <div class="history" id="history"></div>
 </div>
 
 <script>
-async function load() {
-  const res = await fetch("/api/result");
-  const data = await res.json();
+async function load(){
+  const r = await fetch("/state");
+  const d = await r.json();
 
-  document.getElementById("period").innerText = data.period;
-  document.getElementById("number").innerText =
-    data.preview ? data.number : "**";
+  document.getElementById("date").innerText = "Date: " + d.date;
+  document.getElementById("time").innerText = "Time: " + d.time;
+  document.getElementById("cd").innerText = d.countdown;
+  document.getElementById("period").innerText = d.period;
+  document.getElementById("num").innerText = d.number;
 
   document.getElementById("history").innerHTML =
-    data.history.map(h => `${h.period} → ${h.number}`).join("<br>");
+    d.history.map(h => h.period + " → " + h.number).join("<br>");
 }
 
-setInterval(load, 1000);
 load();
+setInterval(load, 1000);
 </script>
 
 </body>
-</html>
+                               </html>
